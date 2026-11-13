@@ -3,8 +3,10 @@ import '@fontsource/ibm-plex-mono/latin-400.css';
 import '@fontsource/ibm-plex-mono/latin-500.css';
 import './styles.css';
 import { supplements, byId, EVIDENZ, PREIS_STAND } from './data/supplements.js';
-import { scenes } from './scene/scenes.js';
-import { Stage, webglVerfuegbar } from './scene/stage.js';
+import { ROLLEN, ORTE } from './data/zusatz.js';
+import { szenen } from './bild/szenen.js';
+import { koerperSzene } from './bild/koerper.js';
+import { Bild } from './bild/bild.js';
 
 const SCHRITT_DAUER = 9000;
 const ruhig = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -25,18 +27,9 @@ function h(tag, attrs = {}, ...kinder) {
   }
   return el;
 }
-const hex = (n) => (typeof n === 'number' ? `#${n.toString(16).padStart(6, '0')}` : n);
 
-const state = {
-  id: null,
-  kg: 75,
-  step: 0,
-  spielt: !ruhig,
-  stage: null,
-  timer: 0,
-  start: 0,
-  ui: {},
-};
+const state = { id: null, kg: 75, step: 0, spielt: !ruhig, bilder: [], timer: 0, ui: {} };
+const gruppenName = (g) => (g === 'Trend' ? 'Neu & Trend' : 'Kern-Set Ausdauer');
 
 // ── Menü ───────────────────────────────────────────────────────────
 function baueMenue() {
@@ -47,7 +40,7 @@ function baueMenue() {
       h(
         'div',
         { class: 'menue__gruppe' },
-        h('p', { class: 'menue__titel' }, g === 'Trend' ? 'Neu & Trend' : 'Kern-Set Ausdauer'),
+        h('p', { class: 'menue__titel' }, gruppenName(g)),
         h(
           'ul',
           {},
@@ -72,25 +65,56 @@ function baueMenue() {
   );
 }
 
-// ── Detailansicht ──────────────────────────────────────────────────
-function kachel(label, wert) {
-  return h('div', { class: 'kachel' }, h('p', { class: 'kachel__label' }, label), h('p', { class: 'kachel__wert' }, wert));
+// ── Bausteine der Detailansicht ────────────────────────────────────
+const kachel = (label, wert, klasse = '') =>
+  h('div', { class: `kachel ${klasse}` }, h('p', { class: 'kachel__label' }, label), h('p', { class: 'kachel__wert' }, wert));
+
+const karte = (id, titel, ...inhalt) => h('section', { class: `karte karte--${id}`, id: `a-${id}` }, h('h2', { class: 'karte__titel' }, titel), ...inhalt);
+
+const zeilen = (...paare) => h('dl', { class: 'zeilen' }, paare.map(([label, text]) => h('div', { class: 'zeile' }, h('dt', {}, label), h('dd', {}, text))));
+
+function abbildung(nr, titel, unterzeile, ...inhalt) {
+  return h(
+    'figure',
+    { class: 'tafel' },
+    ...inhalt,
+    h('figcaption', { class: 'tafel__titel' }, h('b', {}, `Abb. ${nr}`), titel, unterzeile && h('small', {}, unterzeile)),
+  );
 }
 
-function karte(titel, klasse, ...inhalt) {
-  return h('section', { class: `karte ${klasse || ''}` }, h('h2', { class: 'karte__titel' }, titel), ...inhalt);
+function baueAufnahme(s, ui) {
+  ui.koerper = h('div', { class: 'tafel__bild tafel__bild--koerper' });
+  return h(
+    'section',
+    { class: 'block block--aufnahme', id: 'a-aufnahme' },
+    h('h2', { class: 'block__titel' }, h('span', {}, '1'), 'Aufnahme: Wo und wie kommt es in den Körper?'),
+    h(
+      'div',
+      { class: 'block__raster' },
+      abbildung(1, 'Der Weg durch den Körper', 'Die Nummern entsprechen den Stationen rechts.', ui.koerper),
+      h(
+        'div',
+        { class: 'weg' },
+        h('p', { class: 'kurz' }, s.aufnahme.kurz),
+        h('div', { class: 'kennzahlen' }, s.aufnahme.kennzahlen.map(([l, w]) => kachel(l, w))),
+        h(
+          'ol',
+          { class: 'stationen' },
+          s.aufnahme.weg.map((st, i) =>
+            h(
+              'li',
+              { class: `station station--${st.rolle}` },
+              h('span', { class: 'station__nr' }, i + 1),
+              h('div', {}, h('p', { class: 'station__kopf' }, ORTE[st.ort], h('span', { class: 'rolle' }, ROLLEN[st.rolle])), h('p', { class: 'station__text' }, st.text)),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
-function zeile(label, text) {
-  return h('div', { class: 'zeile' }, h('dt', {}, label), h('dd', {}, text));
-}
-
-function baueDetail(s) {
-  const sz = scenes[s.id];
-  const ev = EVIDENZ[s.evidenz];
-  const ui = (state.ui = {});
-
-  ui.rechner = h('p', { class: 'rechner__wert' });
+function baueWirkung(s, sz, ui) {
   ui.schritte = sz.steps.map((st, i) =>
     h(
       'li',
@@ -98,55 +122,67 @@ function baueDetail(s) {
       h(
         'button',
         { class: 'schritt', type: 'button', 'aria-expanded': 'false', onclick: () => geheZu(i) },
-        h('span', { class: 'schritt__nr' }, String(i + 1).padStart(2, '0')),
+        h('span', { class: 'schritt__nr' }, i + 1),
         h('span', { class: 'schritt__kopf' }, st.titel),
         h('span', { class: 'schritt__text' }, st.text),
         h('span', { class: 'schritt__lauf', 'aria-hidden': 'true' }),
       ),
     ),
   );
-  ui.play = h('button', { class: 'knopf', type: 'button', onclick: () => setzeSpielt(!state.spielt) });
-  ui.buehne = h('div', { class: 'buehne__canvas' });
-
-  const mechanismus = h(
+  ui.play = h('button', { class: 'knopf knopf--breit', type: 'button', onclick: () => setzeSpielt(!state.spielt) });
+  ui.zelle = h('div', { class: 'tafel__bild' });
+  return h(
     'section',
-    { class: 'mech', 'aria-label': 'Wirkmechanismus' },
+    { class: 'block block--wirkung', id: 'a-wirkung' },
+    h('h2', { class: 'block__titel' }, h('span', {}, '2'), 'Wirkung: Was passiert in der Zelle?'),
     h(
       'div',
-      { class: 'buehne' },
-      h('p', { class: 'buehne__ort' }, h('span', {}, 'Schauplatz'), s.mechanismus.ort, h('small', {}, 'Ziehen = drehen · Scrollen = zoomen')),
-      ui.buehne,
-      h(
-        'ul',
-        { class: 'legende' },
-        sz.legende.map((l) => h('li', {}, h('i', { style: `background:${hex(l.farbe)};box-shadow:0 0 10px ${hex(l.farbe)}` }), l.label)),
+      { class: 'block__raster block__raster--breit' },
+      abbildung(
+        2,
+        s.mechanismus.ort,
+        'Schematisch, nicht maßstabsgetreu.',
+        ui.zelle,
+        h('ul', { class: 'legende' }, sz.legende.map((l) => h('li', {}, h('i', { style: `background:${l.farbe}` }), l.label))),
       ),
-    ),
-    h(
-      'div',
-      { class: 'ablauf' },
-      h('p', { class: 'ablauf__kurz' }, s.mechanismus.kurz),
-      h('ol', { class: 'ablauf__liste' }, ui.schritte),
       h(
         'div',
-        { class: 'ablauf__steuer' },
-        h('button', { class: 'knopf', type: 'button', onclick: () => geheZu(state.step - 1), 'aria-label': 'Schritt zurück' }, '←'),
-        ui.play,
-        h('button', { class: 'knopf', type: 'button', onclick: () => geheZu(state.step + 1), 'aria-label': 'Schritt weiter' }, '→'),
+        { class: 'ablauf' },
+        h('p', { class: 'kurz' }, s.mechanismus.kurz),
+        h('ol', { class: 'ablauf__liste' }, ui.schritte),
+        h(
+          'div',
+          { class: 'ablauf__steuer' },
+          h('button', { class: 'knopf', type: 'button', onclick: () => geheZu(state.step - 1), 'aria-label': 'Schritt zurück' }, '←'),
+          ui.play,
+          h('button', { class: 'knopf', type: 'button', onclick: () => geheZu(state.step + 1), 'aria-label': 'Schritt weiter' }, '→'),
+        ),
       ),
     ),
   );
+}
 
-  const el = h(
+function baueDetail(s) {
+  const sz = szenen[s.id];
+  const ev = EVIDENZ[s.evidenz];
+  const ui = (state.ui = {});
+  ui.rechner = h('p', { class: 'rechner__wert' });
+  const sb = s.steckbrief;
+
+  const sprung = [
+    ['aufnahme', 'Aufnahme'],
+    ['wirkung', 'Wirkung'],
+    ['einnahme', 'Einnahme'],
+    ['studien', 'Studien'],
+    ['anbieter', 'Preise'],
+    ['empfehlung', 'Empfehlung'],
+    ['quellen', 'Quellen'],
+  ];
+
+  return h(
     'article',
     { class: 'detail', style: `--akz:${s.farbe}` },
-    h(
-      'header',
-      { class: 'titel' },
-      h('p', { class: 'titel__gruppe' }, s.gruppe === 'Trend' ? 'Neu & Trend' : 'Kern-Set Ausdauer'),
-      h('h1', {}, s.name),
-      h('p', { class: 'titel__claim' }, s.claim),
-    ),
+    h('header', { class: 'titel' }, h('p', { class: 'titel__gruppe' }, gruppenName(s.gruppe)), h('h1', {}, s.name), h('p', { class: 'titel__claim' }, s.claim)),
     h(
       'section',
       { class: 'blick', 'aria-label': 'Auf einen Blick' },
@@ -160,35 +196,47 @@ function baueDetail(s) {
       kachel('Leistungsplus', s.aufEinenBlick.plus),
       kachel('Dosis', s.aufEinenBlick.dosis),
       kachel('Timing', s.aufEinenBlick.timing),
+      kachel('Aufnahme', s.aufnahme.kennzahlen[0][1]),
       kachel('Kosten', s.aufEinenBlick.kosten),
     ),
-    mechanismus,
+    h(
+      'nav',
+      { class: 'sprung', 'aria-label': 'Abschnitte' },
+      sprung.map(([id, name]) =>
+        h('button', { type: 'button', onclick: () => document.getElementById(`a-${id}`)?.scrollIntoView({ behavior: ruhig ? 'auto' : 'smooth', block: 'start' }) }, name),
+      ),
+    ),
+    h('p', { class: 'wasistdas' }, h('b', {}, 'Was ist das? '), sb.was),
+    baueAufnahme(s, ui),
+    baueWirkung(s, sz, ui),
     h(
       'div',
       { class: 'raster' },
       karte(
+        'einnahme',
         'Einnahme',
-        'karte--einnahme',
-        h(
-          'dl',
-          { class: 'zeilen' },
-          zeile('Wie viel', s.einnahme.wieviel),
-          zeile('Wann', s.einnahme.wann),
-          zeile('Wie', s.einnahme.wie),
-          zeile('Achtung', s.einnahme.achtung),
+        zeilen(
+          ['Wie viel', s.einnahme.wieviel],
+          ['Wann', s.einnahme.wann],
+          ['Wie', s.einnahme.wie],
+          ['Formen', sb.formen],
+          ['Im Essen', sb.nahrung],
+          ['Kombinieren', sb.kombi],
+          ['Achtung', s.einnahme.achtung],
+          ['Neben\u00adwirkungen', sb.nebenwirkungen],
         ),
         h('div', { class: 'rechner' }, h('p', { class: 'rechner__label' }, 'Für dich gerechnet'), ui.rechner),
       ),
       karte(
+        'studien',
         'Studienlage',
-        'karte--studien',
         h('p', { class: 'studien__plus' }, s.studien.leistungsplus),
         h('ul', { class: 'punkte' }, s.studien.punkte.map((p) => h('li', {}, p))),
         h('p', { class: 'studien__evi' }, h('span', { class: `evi evi--${s.evidenz}` }, s.evidenz), ev.text),
       ),
       karte(
+        'anbieter',
         'Anbieter & Preise',
-        'karte--anbieter',
         h(
           'ul',
           { class: 'anbieter' },
@@ -206,27 +254,18 @@ function baueDetail(s) {
         ),
         h('p', { class: 'klein' }, `Stand ${PREIS_STAND}. Preise ändern sich – vor dem Kauf kurz vergleichen.`),
       ),
-      karte('Empfehlung', 'karte--empfehlung', h('p', { class: 'empfehlung' }, s.empfehlung)),
+      karte('empfehlung', 'Empfehlung', h('p', { class: 'empfehlung' }, s.empfehlung), zeilen(['Wofür', sb.fuerWen], ['Doping-Status', sb.doping])),
       karte(
+        'quellen',
         'Quellen',
-        'karte--quellen',
         h(
           'ol',
           { class: 'quellen' },
-          s.quellen.map((q) =>
-            h(
-              'li',
-              {},
-              h('a', { href: q.url, target: '_blank', rel: 'noopener noreferrer' }, q.kurz),
-              h('span', {}, ` ${q.titel}. `),
-              h('em', {}, q.journal),
-            ),
-          ),
+          s.quellen.map((q) => h('li', {}, h('a', { href: q.url, target: '_blank', rel: 'noopener noreferrer' }, q.kurz), h('span', {}, ` ${q.titel}. `), h('em', {}, q.journal))),
         ),
       ),
     ),
   );
-  return el;
 }
 
 // ── Ablaufsteuerung ────────────────────────────────────────────────
@@ -242,18 +281,18 @@ function setzeSpielt(an) {
     state.ui.play.setAttribute('aria-pressed', String(an));
   }
   document.documentElement.classList.toggle('spielt', an);
-  clearTimeout(state.timer);
-  if (an) plane();
+  for (const b of state.bilder) (an ? b.start() : b.stop());
+  plane();
 }
 
 function plane() {
   clearTimeout(state.timer);
-  if (!state.spielt) return;
+  if (!state.spielt || document.hidden) return;
   state.timer = setTimeout(() => geheZu(state.step + 1), SCHRITT_DAUER);
 }
 
 function geheZu(i) {
-  const n = scenes[state.id].steps.length;
+  const n = szenen[state.id].steps.length;
   state.step = ((i % n) + n) % n;
   state.ui.schritte.forEach((li, k) => {
     const b = li.firstChild;
@@ -261,14 +300,13 @@ function geheZu(i) {
     b.classList.toggle('ist-aktiv', aktiv);
     b.setAttribute('aria-expanded', String(aktiv));
     if (aktiv) {
-      // Laufbalken neu starten
       const lauf = b.querySelector('.schritt__lauf');
       lauf.style.animation = 'none';
       void lauf.offsetWidth;
       lauf.style.animation = '';
     }
   });
-  if (state.stage) state.stage.setStep(state.step);
+  state.zelle?.setStep(state.step);
   plane();
 }
 
@@ -284,30 +322,14 @@ function zeige(id) {
     if (an && a.scrollIntoView && window.innerWidth < 900) a.scrollIntoView({ block: 'nearest', inline: 'center' });
   });
 
-  if (state.stage) {
-    state.stage.dispose();
-    state.stage = null;
-  }
-  const inhalt = document.getElementById('inhalt');
-  inhalt.replaceChildren(baueDetail(s));
+  for (const b of state.bilder) b.dispose();
+  document.getElementById('inhalt').replaceChildren(baueDetail(s));
   rechne();
-
-  if (webglVerfuegbar()) {
-    try {
-      state.stage = new Stage(state.ui.buehne, { ruhig });
-      state.stage.load(scenes[s.id]);
-      state.stage.start();
-    } catch (e) {
-      console.error(e);
-      state.stage = null;
-    }
-  }
-  if (!state.stage) {
-    state.ui.buehne.append(h('p', { class: 'buehne__ersatz' }, '3D-Ansicht braucht WebGL – die Schritte rechts erklären den Ablauf trotzdem.'));
-  }
+  state.zelle = new Bild(state.ui.zelle, szenen[s.id], { ruhig });
+  state.bilder = [new Bild(state.ui.koerper, koerperSzene(s), { ruhig }), state.zelle];
   geheZu(0);
   setzeSpielt(state.spielt);
-  inhalt.scrollTop = 0;
+  window.scrollTo(0, 0);
 }
 
 // ── Start ──────────────────────────────────────────────────────────
@@ -341,14 +363,8 @@ function init() {
     if (e.key === 'ArrowLeft') geheZu(state.step - 1);
   });
   document.addEventListener('visibilitychange', () => {
-    if (!state.stage) return;
-    if (document.hidden) {
-      state.stage.stop();
-      clearTimeout(state.timer);
-    } else {
-      state.stage.start();
-      plane();
-    }
+    for (const b of state.bilder) (document.hidden || !state.spielt ? b.stop() : b.start());
+    plane();
   });
   zeige(location.hash.slice(1) || supplements[0].id);
 }
