@@ -471,7 +471,8 @@ button {
 }
 
 .abb [data-s],
-.abb .strom {
+.abb [data-strom],
+.abb [data-teilchen] {
   transition: opacity 0.45s ease;
 }
 
@@ -1002,7 +1003,8 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .abb [data-s],
-  .abb .strom {
+  .abb [data-strom],
+  .abb [data-teilchen] {
     transition: none;
   }
 }

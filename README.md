@@ -50,3 +50,10 @@ npm run build   # schreibt dist/ (wird mit eingecheckt)
 - Evidenzstufen: A = mehrere Meta-Analysen/Positionspapiere, B = solide, aber situativ, C = dünn oder umstritten.
 - Die Abbildungen sind Schemata, keine maßstabsgetreuen Strukturen.
 - Kein medizinischer Rat.
+
+## Abbildungen liefern
+
+Externe Illustratoren liefern SVG-Dateien nach `abbildungen/`. Sie ersetzen dann automatisch die eingebauten Zeichnungen. Vorgaben, Schnittstelle, Lieferweg und Abnahme: [docs/abbildungen/LASTENHEFT.md](docs/abbildungen/LASTENHEFT.md), Vorgaben je Abbildung: [docs/abbildungen/KATALOG.md](docs/abbildungen/KATALOG.md).
+
+- `npm run pruefe-abbildungen` prüft gelieferte Dateien (läuft auch im Build und in den Tests).
+- `npm run lastenheft` erzeugt Katalog, Vorlagen und Vorschauen neu, wenn sich Texte oder Szenen ändern. Die Tests schlagen fehl, wenn das vergessen wurde.
