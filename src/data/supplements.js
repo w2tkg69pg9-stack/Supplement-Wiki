@@ -1,6 +1,8 @@
 // Inhalte des Supplement-Wikis.
 // Jede Zahl hier drin hängt an einer Quelle in `quellen`. Preise sind Momentaufnahmen (siehe PREIS_STAND).
 
+import { zusatz } from './zusatz.js';
+
 export const PREIS_STAND = 'November 2026';
 
 // Evidenz-Stufen: A = mehrere Meta-Analysen/Positionspapiere, B = solide, aber situativ, C = dünn oder widersprüchlich
@@ -433,5 +435,14 @@ export const supplements = [
     },
   },
 ];
+
+// Steckbrief, Aufnahmeweg und Zusatzquellen anhängen
+for (const s of supplements) {
+  const z = zusatz[s.id];
+  s.farbe = z.farbe;
+  s.steckbrief = z.steckbrief;
+  s.aufnahme = z.aufnahme;
+  s.quellen = [...s.quellen, ...z.quellen];
+}
 
 export const byId = (id) => supplements.find((s) => s.id === id);
