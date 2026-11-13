@@ -7,6 +7,7 @@ import { ROLLEN, ORTE } from './data/zusatz.js';
 import { szenen } from './bild/szenen.js';
 import { koerperSzene } from './bild/koerper.js';
 import { Bild } from './bild/bild.js';
+import geliefert from 'abbildungen:geliefert';
 
 const SCHRITT_DAUER = 9000;
 const ruhig = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -162,8 +163,11 @@ function baueWirkung(s, sz, ui) {
   );
 }
 
+// Gelieferte Zeichnung (abbildungen/zelle/<id>.svg) ersetzt die eingebaute
+const zellSzene = (id) => (geliefert.zelle[id] ? { ...szenen[id], svg: geliefert.zelle[id] } : szenen[id]);
+
 function baueDetail(s) {
-  const sz = szenen[s.id];
+  const sz = zellSzene(s.id);
   const ev = EVIDENZ[s.evidenz];
   const ui = (state.ui = {});
   ui.rechner = h('p', { class: 'rechner__wert' });
@@ -325,8 +329,8 @@ function zeige(id) {
   for (const b of state.bilder) b.dispose();
   document.getElementById('inhalt').replaceChildren(baueDetail(s));
   rechne();
-  state.zelle = new Bild(state.ui.zelle, szenen[s.id], { ruhig });
-  state.bilder = [new Bild(state.ui.koerper, koerperSzene(s), { ruhig }), state.zelle];
+  state.zelle = new Bild(state.ui.zelle, zellSzene(s.id), { ruhig });
+  state.bilder = [new Bild(state.ui.koerper, koerperSzene(s, geliefert.koerper), { ruhig }), state.zelle];
   geheZu(0);
   setzeSpielt(state.spielt);
   window.scrollTo(0, 0);

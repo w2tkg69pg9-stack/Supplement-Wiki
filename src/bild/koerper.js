@@ -1,5 +1,6 @@
 // Abb. 1 je Supplement: der Weg durch den Körper – vom Mund bis zum Wirkort und wieder raus.
 import { blob, label } from './teile.js';
+import { anker, koerperAnpassen } from './lieferung.js';
 
 const DX = 34; // linker Rand für Beschriftungen
 export const W = 408;
@@ -55,14 +56,18 @@ const ORGANE = {
 
 const rund = (v) => +v.toFixed(1);
 
-// Glatte Kurve (Catmull-Rom) durch alle Stationen
-export function wegPfad(weg) {
+// Punkte der Stationen; wiederholte Orte leicht versetzt
+function punkte(weg, ank, dx = 9, dy = 7) {
   const zahl = {};
-  const p = weg.map(({ ort }) => {
+  return weg.map(({ ort }) => {
     const k = (zahl[ort] = (zahl[ort] || 0) + 1) - 1;
-    const [x, y] = ANKER[ort];
-    return [x + DX + k * 9, y + k * 7];
+    const [x, y] = ank[ort];
+    return [x + k * dx, y + k * dy];
   });
+}
+
+// Glatte Kurve (Catmull-Rom) durch alle Punkte
+export function wegPfad(p) {
   let d = `M${p[0][0]} ${p[0][1]}`;
   for (let i = 0; i < p.length - 1; i++) {
     const a = p[Math.max(0, i - 1)];
@@ -74,40 +79,60 @@ export function wegPfad(weg) {
   return d;
 }
 
-export function koerperSzene(s) {
+// basis: gelieferte Körper-SVG (optional). Ohne Lieferung zeichnet der Code selbst.
+export function koerperSzene(s, basis) {
   const weg = s.aufnahme.weg;
   const dabei = new Set(weg.map((w) => w.ort));
-  return {
+  const ank = basis ? anker(basis) : Object.fromEntries(Object.entries(ANKER).map(([o, [x, y]]) => [o, [x + DX, y]]));
+  const sz = {
     w: W,
     h: H,
     titel: `Weg von ${s.name} durch den Körper`,
-    zeichne() {
-      const rumpf =
-        'M148 110V132C148 146 70 142 52 188C44 210 44 240 44 270V452C44 470 50 490 60 504V584H160L164 524Q170 510 176 524L180 584H280V504C290 490 296 470 296 452V270C296 240 296 210 288 188C270 142 192 146 192 132V110';
-      const haut = 'fill="#f8f0e4" stroke="#cbbda6" stroke-width="2.2"';
-      const speise = 'M170 101V194C170 206 180 208 190 212';
-      let s2 = `<g transform="translate(${DX} 0)"><path d="${rumpf}" ${haut}/><ellipse cx="170" cy="62" rx="47" ry="55" ${haut}/>`;
-      s2 += `<path d="${speise}" fill="none" stroke="#b9705f" stroke-width="9" stroke-linecap="round"/><path d="${speise}" fill="none" stroke="#f3c5b8" stroke-width="5" stroke-linecap="round"/>`;
-      for (const ort of ['dickdarm', 'duenndarm', 'leber', 'magen', 'niere', 'blut', 'gehirn', 'mund', 'muskel']) {
-        s2 += `<g data-ort="${ort}" opacity="${dabei.has(ort) ? 1 : 0.28}">${ORGANE[ort]()}</g>`;
-      }
-      for (const ort of dabei) {
-        const [x, y, name, zu, von] = SCHILD[ort];
-        s2 += label(x, y, name, zu, { g: 13.5, von, fett: true });
-      }
-      return `${s2}</g>`;
-    },
     oben() {
-      const zahl = {};
-      let b = '';
-      weg.forEach(({ ort }, i) => {
-        const k = (zahl[ort] = (zahl[ort] || 0) + 1) - 1;
-        const [x, y] = ANKER[ort];
-        b += `<g transform="translate(${x + DX + k * 23} ${y - 1})"><circle r="11.5" fill="${s.farbe}" stroke="#fff" stroke-width="2.2"/><text class="tt" text-anchor="middle" dominant-baseline="central" font-size="12.5" fill="#fff">${i + 1}</text></g>`;
-      });
-      return b;
+      return punkte(weg, ank, 23, 0)
+        .map(
+          ([x, y], i) =>
+            `<g transform="translate(${x} ${y - 1})"><circle r="11.5" fill="${s.farbe}" stroke="#fff" stroke-width="2.2"/><text class="tt" text-anchor="middle" dominant-baseline="central" font-size="12.5" fill="#fff">${i + 1}</text></g>`,
+        )
+        .join('');
     },
-    flows: { weg: { d: wegPfad(weg), farbe: s.farbe, form: 'kreis', r: 5.5, rand: '#fff', n: 3, dauer: Math.max(7, weg.length * 1.8) } },
+    flows: { weg: { d: wegPfad(punkte(weg, ank)), farbe: s.farbe, form: 'kreis', r: 5.5, rand: '#fff', n: 3, dauer: Math.max(7, weg.length * 1.8) } },
     steps: [{ flows: { weg: 1 } }],
   };
+  if (basis) {
+    sz.svg = koerperAnpassen(basis, dabei).replace(/<\/svg>\s*$/, `<path data-strom="weg" d="${sz.flows.weg.d}" fill="none" stroke="${s.farbe}" stroke-width="1.7" stroke-dasharray="5 5" opacity=".8"/></svg>`);
+    return sz;
+  }
+  sz.zeichne = function () {
+    const rumpf =
+      'M148 110V132C148 146 70 142 52 188C44 210 44 240 44 270V452C44 470 50 490 60 504V584H160L164 524Q170 510 176 524L180 584H280V504C290 490 296 470 296 452V270C296 240 296 210 288 188C270 142 192 146 192 132V110';
+    const haut = 'fill="#f8f0e4" stroke="#cbbda6" stroke-width="2.2"';
+    const speise = 'M170 101V194C170 206 180 208 190 212';
+    let s2 = `<g transform="translate(${DX} 0)"><path d="${rumpf}" ${haut}/><ellipse cx="170" cy="62" rx="47" ry="55" ${haut}/>`;
+    s2 += `<path d="${speise}" fill="none" stroke="#b9705f" stroke-width="9" stroke-linecap="round"/><path d="${speise}" fill="none" stroke="#f3c5b8" stroke-width="5" stroke-linecap="round"/>`;
+    for (const ort of ['dickdarm', 'duenndarm', 'leber', 'magen', 'niere', 'blut', 'gehirn', 'mund', 'muskel']) {
+      s2 += `<g data-ort="${ort}" opacity="${dabei.has(ort) ? 1 : 0.28}">${ORGANE[ort]()}</g>`;
+    }
+    for (const ort of dabei) {
+      const [x, y, name, zu, von] = SCHILD[ort];
+      s2 += label(x, y, name, zu, { g: 13.5, von, fett: true });
+    }
+    return `${s2}</g>`;
+  };
+  return sz;
+}
+
+// Vorlage im Lieferformat (für das Lastenheft): alle Organe als org-…, Schilder als schild-…, Anker als anker-…
+export function koerperVorlage() {
+  const sz = koerperSzene({ name: 'Vorlage', farbe: '#888888', aufnahme: { weg: Object.keys(ANKER).map((ort) => ({ ort })) } });
+  let s = sz.zeichne();
+  s = s.replace(/<g data-ort="([a-z]+)" opacity="1">/g, '<g id="org-$1">');
+  const teile = s.split(/(?=<g><path d="M[^"]*" stroke="#2b2f38")/);
+  const orte = Object.keys(ANKER).filter((o) => o in SCHILD);
+  // Schilder stehen in der Reihenfolge von ANKER am Ende der Gruppe
+  s = teile[0] + teile.slice(1).map((t, i) => t.replace(/^<g>/, `<g id="schild-${orte[i]}">`)).join('');
+  const anker = Object.entries(ANKER)
+    .map(([o, [x, y]]) => `<circle id="anker-${o}" cx="${x + DX}" cy="${y}" r="4" fill="#ff00ff"/>`)
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">\n<!-- Vorlage Abb. 1 im Lieferformat. Magenta-Punkte = Anker (werden auf der Seite ausgeblendet). -->\n${s}\n${anker}\n</svg>\n`;
 }

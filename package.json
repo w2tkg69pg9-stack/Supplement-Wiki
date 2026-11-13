@@ -7,7 +7,9 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --serve",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "lastenheft": "node scripts/lastenheft.mjs",
+    "pruefe-abbildungen": "node scripts/abbildungen.mjs"
   },
   "devDependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
